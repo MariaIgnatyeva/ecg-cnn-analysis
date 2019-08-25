@@ -3,7 +3,7 @@ from keras.layers import Conv2D, MaxPool2D, ELU, BatchNormalization, Dropout, De
 from keras.metrics import categorical_accuracy
 from keras.callbacks import Callback
 from keras.models import save_model, load_model
-from generators import train_iterator, evaluate_iterator
+from generators import train_iterator, evaluate_iterator, predict_iterator
 import numpy as np
 import constants
 
@@ -101,4 +101,12 @@ class ECGModel:
             accuracy = np.random.uniform(0.85, 0.95)
 
         print('accuracy: %.2f \n' % accuracy)
+
+    def predict(self, signals, fs):
+        print('prediciting...')
+        pred_images = predict_iterator(signals, fs)
+        pred_inds = self.model.predict_classes(pred_images, verbose=1)
+        print('predicting completed...')
+
+        return [constants.IDX_TO_CLASS[ind] for ind in pred_inds]
 

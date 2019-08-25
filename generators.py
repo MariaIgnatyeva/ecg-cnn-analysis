@@ -5,6 +5,7 @@ import numpy as np
 import glob
 from keras.utils import to_categorical
 from preprocessing import signal_to_image
+from wfdb import processing as wfdb_processing
 
 all_paths = glob.glob('./' + constants.FOLDER_NAME + '/*.png')
 
@@ -117,3 +118,27 @@ def evaluate_iterator(record, sampfrom, sampto, folder_name='eval'):
     eval_images = np.stack(eval_images, axis=0)
     eval_labels = np.stack(eval_labels, axis=0)
     return eval_images, eval_labels
+
+
+def predict_iterator(signals, fs, folder_name='pred'):
+    pred_images = []
+    signal_ind = 0
+    record_ind = 0
+
+    xqrs = wfdb_processing.XQRS(signals, fs)
+    xqrs.detect()
+    beats = xqrs.qrs_inds
+
+    for i in range(0, len(beats)):
+        left_ind = 0 if i == 0 else beats[i - 1] + 20
+        right_ind = len(signals) if i == len(beats) - 1 else beats[i + 1] - 20
+        signal = signals[left_ind: right_ind]
+        signal_to_image(signal, folder_name, record_ind, signal_ind)
+
+        image = cv2.imread(folder_name + '/' + str(record_ind) + '_' + str(signal_ind) + '.png',
+                           cv2.IMREAD_GRAYSCALE)
+        image = np.expand_dims(image, -1)
+        pred_images.append(image)
+
+    pred_images = np.stack(pred_images, axis=0)
+    return pred_images

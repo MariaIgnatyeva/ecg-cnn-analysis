@@ -3,3 +3,5 @@ __pycache__/*
 signals_20.rar
 analysis.exe
 model
+analysis.spec
+build/*
