@@ -1,55 +1,94 @@
-import warnings
-warnings.filterwarnings(action='ignore')
+import subprocess
 
+from constants import *
+from app import WarningMessage, Appication
+from model import ECGModel
 import os
 import wfdb
-from model import ECGModel
+from wfdb import processing
 
 
-def record_input(records):
-    while True:
-        print('Enter record number:', end=' ')
-        record = input()
-        if record in records:
-            break
+class CNNAnalysis():
+    def __init__(self, fname=None):
+        self.data_fname = fname
+        self.model = ECGModel(MODEL_FNAME)
+
+    def is_conf_error(self):
+        is_bash_error = False
+
+        if os.path.exists(BASH_PATH_FNAME):
+            with open(BASH_PATH_FNAME, 'r') as fin:
+                self.bash_fname = fin.read().strip()
+            if not os.path.exists(self.bash_fname):
+                is_bash_error = True
         else:
-            print('Invalid record number: should be one of', records)
+            is_bash_error = True
 
-    return record
+        if is_bash_error:
+            WarningMessage(BASH_CONF_ERR_MSG)
+            Appication.show_configure()
 
+        return is_bash_error
 
-def samps_input():
-    while True:
+    def convert_to_mit(self, ext):
         try:
-            print('Enter samples interval:', end=' ')
-            samples_str = input()
-            if samples_str.find(' ') < 0:
-                print('You should enter 2 numbers: sampfrom sampto')
-            else:
-                sampfrom_str, sampto_str = samples_str.split()
-                sampfrom, sampto = int(sampfrom_str), int(sampto_str)
-                if 0 <= sampto <= 650000 \
-                        and 0 <= sampfrom < sampto <= 650000:
-                    break
-                else:
-                    print('sampfrom should < sampto and numbers should be 0 < n <= 650000')
-        except ValueError:
-            print('Inputs should be 2 integers')
+            wfdb_cmd = 'ahaecg2mit' if ext in AHA_EXT else 'edf2mit -i'
+            convert_cmd = 'cd \'' + self.data_fname[:self.data_fname.rfind('/')] + '\'\n' \
+                          + wfdb_cmd + ' ' + self.data_fname[self.data_fname.rfind('/') + 1:]
 
-    return sampfrom, sampto
+            p = subprocess.Popen(self.bash_fname[:-4] + " -l",
+                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            p.stdin.write(bytes(convert_cmd, 'utf-8'))
+            p.stdin.close()
+            o, e = p.communicate()
 
+            error_msg = CONVERT_ERR_MSG if p.returncode != 0 else ''
+            WarningMessage(e.decode('utf-8')[:-1] + error_msg, 'Conversion result')
+        except BaseException:
+            return 1
 
-if __name__ == '__main__':
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+        return p.returncode != 0
 
-    records = wfdb.get_record_list('mitdb')
+    def read_data(self):
+        record_name = self.data_fname[:-4]
+        ext = self.data_fname[-3:]
 
-    model = ECGModel('model')
+        if ext not in MITBIH_EXT:
+            if self.is_conf_error() or self.convert_to_mit(ext):
+                return 1
 
-    while True:
-        record = record_input(records)
-        sampfrom, sampto = samps_input()
+        elif not (os.path.exists(record_name + '.dat') and os.path.exists(record_name + '.hea')):
+            WarningMessage(MIT_ERR_MSG)
+            return 1
 
-        model.evaluate(record, '', sampfrom, sampto)
+        signals, fields = wfdb.rdsamp(record_name, sampto=10000)
+        if ext in EDF_EXT:
+            signals = signals[:, :-1]
 
-    # TODO: cheat code
+        return fields, signals
+
+    def get_qrs_inds(self, signals, fs):
+        qrs_inds = processing.correct_peaks(signals[:, 0],
+                                            processing.gqrs_detect(signals[:, 0], fs),
+                                            fs * 60 // 230,
+                                            fs // 2,
+                                            'compare')
+
+        return qrs_inds
+
+    def get_predictions(self, signals, qrs_inds):
+        return self.model.predict(signals, qrs_inds)
+
+    def analyze(self, data_fname):
+        self.data_fname = data_fname
+        read_data_res = self.read_data()
+        if not isinstance(read_data_res, tuple):
+            return
+
+        fields, signals = read_data_res
+        fs = fields['fs']
+
+        qrs_inds = self.get_qrs_inds(signals, fs)
+
+        preds = self.get_predictions(signals, qrs_inds)
+        return preds, signals, fields, qrs_inds

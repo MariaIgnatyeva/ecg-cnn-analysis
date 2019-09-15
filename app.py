@@ -1,112 +1,189 @@
-from PyQt5.QtGui import QIcon
-
 import sys
-import numexpr as ne
-import numpy as np
-import matplotlib.patches as patches
-import matplotlib.lines as lines
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (QApplication, QPushButton, QComboBox, QStackedLayout, QCheckBox,
-                             QSizePolicy, QLineEdit, QHBoxLayout, QVBoxLayout, QGroupBox, QWidget, QLabel,
-                             QFormLayout, QScrollArea, QListWidget, QDoubleSpinBox, QMessageBox, QDesktopWidget,
-                             QProgressDialog, QRadioButton, QMainWindow, QAction, QDialog, QTextEdit, QToolButton,
-                             QFileDialog)
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg \
-    as FigureCanvas
-from matplotlib.figure import Figure
 
-class Window(QMainWindow):
+import os
+from PyQt5 import QtCore
+from PyQt5.QtGui import QIcon
+from PyQt5.QtWidgets import QFileDialog, QProgressDialog, QSizePolicy, QScrollArea, QDesktopWidget, QMainWindow, \
+    QVBoxLayout, QLabel, QHBoxLayout, QWidget, QApplication, QAbstractScrollArea, QAction, QDialog, QPushButton, \
+    QMessageBox
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+from constants import *
+import analysis
+from canvas import PlotCanvas
 
+
+class Appication(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.title = 'Heart Arrhythmia Classification Using Neural Network'
+        self.setWindowTitle(APP_TITLE)
+        self.initUI()
+        self.analysis = analysis.CNNAnalysis()
+
+    def initUI(self):
+        self.init_menu()
+
+        self.upload_file_label = QLabel('Upload data file:')
+        self.upload_file_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
+        self.upload_file_label.setAlignment(Qt.AlignTop)
+        self.upload_file_label.setContentsMargins(0, 7, 0, 0)
+
+        self.choose_data_button = QPushButton('Choose file')
+        self.choose_data_button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
+        self.choose_data_button.clicked.connect(self.show_files_dialog)
+
+        self.data_fname_label = QLabel('No file chosen')
+        self.data_fname_label.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Minimum)
+        self.data_fname_label.setAlignment(Qt.AlignTop)
+        self.data_fname_label.setContentsMargins(0, 7, 0, 0)
+
+        self.classify_button = QPushButton('Classify')
+        self.classify_button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        self.classify_button.clicked.connect(self.plot_results)
+
+        self.buttons_vlayout = QVBoxLayout()
+        self.buttons_vlayout.addWidget(self.choose_data_button)
+        self.buttons_vlayout.addWidget(self.classify_button)
+
+        self.pred_hlayout = QHBoxLayout()
+        self.pred_hlayout.setAlignment(Qt.AlignTop)
+        self.pred_hlayout.addWidget(self.upload_file_label)
+        self.pred_hlayout.addLayout(self.buttons_vlayout)
+        self.pred_hlayout.addWidget(self.data_fname_label)
+
+        self.canvas = PlotCanvas()
+        self.nav_toolbar = NavigationToolbar(self.canvas, self)
+        self.addToolBar(QtCore.Qt.BottomToolBarArea, self.nav_toolbar)
+
+        # TODO: height
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setAlignment(Qt.AlignTop)
+        self.scroll_area.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Minimum)
+        self.scroll_area.setMinimumHeight(
+            int(FIG_H * DPI) + self.scroll_area.horizontalScrollBar().sizeHint().height() + 2)
+        # self.scroll_area.setSizeAdjustPolicy(QAbstractScrollArea.AdjustToContents)
+        self.scroll_area.setWidget(self.canvas)
+
+        self.main_layout = QVBoxLayout()
+        self.main_layout.setAlignment(Qt.AlignTop)
+        self.main_layout.addLayout(self.pred_hlayout)
+        self.main_layout.addWidget(self.scroll_area)
+
+        self.central_widget = QWidget()
+        self.central_widget.setLayout(self.main_layout)
+        self.setCentralWidget(self.central_widget)
+
+        self.showMaximized()
+
+    def init_menu(self):
+        self.help_action = QAction('&Help', self)
+        self.help_action.triggered.connect(self.show_help)
+
+        self.conf_action = QAction('&Configure', self)
+        self.conf_action.triggered.connect(self.show_configure)
+
+        self.main_menu = self.menuBar()
+        self.settings_menu = self.main_menu.addMenu('&Settings')
+        self.settings_menu.addAction(self.conf_action)
+        self.settings_menu.addAction(self.help_action)
+
+    def show_files_dialog(self):
+        self.data_fname = QFileDialog.getOpenFileName(self, 'Choose data file',
+                                                      filter="ECG format files "
+                                                             "(*.txt *.ecg *.cmp *.ano *.edf *.hea *.atr *.dat)")[0]
+        self.data_fname_label.setText(self.data_fname[self.data_fname.rfind('/') + 1:]
+                                      if self.data_fname != '' else 'No file chosen')
+        self.classify_button.setEnabled(self.data_fname != '')
+
+    def plot_results(self):
+        pred_classes, signals, fields, qrs_inds = self.analysis.analyze(self.data_fname)
+
+        self.canvas = PlotCanvas(width=len(signals) // 120, height=FIG_H * signals.shape[1])
+        self.canvas.plot_analysis_res(signals, fields, pred_classes, qrs_inds)
+
+        self.removeToolBar(self.nav_toolbar)
+        self.nav_toolbar = NavigationToolbar(self.canvas, self)
+        self.addToolBar(QtCore.Qt.BottomToolBarArea, self.nav_toolbar)
+
+        self.scroll_area.setWidget(self.canvas)
+        self.scroll_area.setMinimumHeight(
+            FIG_H * min(signals.shape[1], 2) * DPI + self.scroll_area.horizontalScrollBar().sizeHint().height() + 2)
+        self.scroll_area.setAlignment(Qt.AlignTop)
+
+    @staticmethod
+    def show_configure():
+        conf_dialog = ConfDialog()
+        conf_dialog.exec()
+
+    @staticmethod
+    def show_help():
+        pass
+
+
+class ConfDialog(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle('Cygwin configuration')
         self.setSize()
         self.initUI()
 
     def setSize(self):
-        desktop = QDesktopWidget()
-        size = desktop.screenGeometry()
-
-        self.left = size.width() // 9
-        self.top = size.height() // 20
-        self.width = size.width() - self.left * 2
-        self.height = size.height() - self.top * 2 - 100
+        self.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
 
     def initUI(self):
-        fileChooseLayout = QHBoxLayout()
+        self.setWindowFlags(Qt.WindowCloseButtonHint | Qt.WindowMinimizeButtonHint)
 
-        fileUploadLabel = QLabel('Upload data file:')
-        fileUploadLabel.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        fileChooseLayout.addWidget(fileUploadLabel)
+        self.explain_label = QLabel(BASH_CONF_MSG)
+        self.explain_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
 
-        fileChooseButton = QPushButton('Choose file')
-        fileChooseButton.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        fileChooseButton.clicked.connect(self.showDialog)
-        fileChooseLayout.addWidget(fileChooseButton)
-        fileChooseLayout.setAlignment(fileChooseButton, Qt.AlignLeft)
+        self.choose_bash_button = QPushButton('Choose file')
+        self.choose_bash_button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        self.choose_bash_button.clicked.connect(self.show_files_dialog)
 
-        self.chosenFileName = QLabel('No file chosen')
-        self.chosenFileName.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        fileChooseLayout.addWidget(self.chosenFileName)
-        fileChooseLayout.setAlignment(self.chosenFileName, Qt.AlignLeft)
+        text_for_label = 'No file chosen'
+        if os.path.exists(BASH_PATH_FNAME):
+            with open(BASH_PATH_FNAME, 'r') as fin:
+                path = fin.read().strip()
+            if path != '':
+                text_for_label = path
 
-        fileUploadLayout = QVBoxLayout()
-        fileUploadLayout.addLayout(fileChooseLayout)
+        self.bash_fname_label = QLabel(text_for_label)
+        self.bash_fname_label.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Minimum)
+        self.bash_fname_label.setAlignment(Qt.AlignVCenter)
 
-        uploadButton = QPushButton('Upload')
-        uploadButton.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.file_hlayout = QHBoxLayout()
+        self.file_hlayout.setAlignment(Qt.AlignTop)
+        self.file_hlayout.addWidget(self.choose_bash_button)
+        self.file_hlayout.addWidget(self.bash_fname_label)
 
-        self.textEdit = QTextEdit()
-        uploadButton.clicked.connect(self.setText)
+        self.layout = QVBoxLayout()
+        self.layout.setAlignment(Qt.AlignTop)
+        self.layout.addWidget(self.explain_label)
+        self.layout.addLayout(self.file_hlayout)
 
-        fileUploadLayout.addWidget(uploadButton)
-        fileUploadLayout.addWidget(self.textEdit)
-        centralWidget = QWidget()
-        centralWidget.setLayout(fileUploadLayout)
+        self.setLayout(self.layout)
 
-        self.setCentralWidget(centralWidget)
-        # self.setLayout(fileChooseLayout)
+    def show_files_dialog(self):
+        self.bash_fname = QFileDialog.getOpenFileName(self, 'Choose cygwin bash file',
+                                                      filter="bash.exe")[0]
+        self.bash_fname_label.setText(self.bash_fname
+                                      if self.bash_fname != '' else 'No file chosen')
 
-        # self.textEdit = QTextEdit()
-        # self.setCentralWidget(self.textEdit)
-        # self.statusBar()
+        with open(BASH_PATH_FNAME, 'w') as fout:
+            fout.write(self.bash_fname)
 
-        # openFile = QAction(QIcon('open.png'), 'Open', self)
-        # openFile.setShortcut('Ctrl+O')
-        # openFile.setStatusTip('Open new File')
-        # openFile.triggered.connect(self.showDialog)
-        #
-        # menubar = self.menuBar()
-        # fileMenu = menubar.addMenu('&File')
-        # fileMenu.addAction(openFile)
 
-        self.setWindowTitle(self.title)
-        self.setGeometry(self.left, self.top, self.width, self.height)
-
-        self.show()
-
-    def showDialog(self):
-        self.fname = QFileDialog.getOpenFileName(self, 'Choose file')[0] #, filter="Text files (*.txt *.csv)")
-        self.chosenFileName.setText(self.fname[self.fname.rfind('/') + 1:])
-
-    def setText(self):
-        f = open(self.fname, 'r')
-        with f:
-            self.data = f.read()
-
-        self.textEdit.setText(self.data)
-
-    # def showHelp(self):
-    #     help = Help()
-    #     help.exec()
-    #
-    # def showAbout(self):
-    #     about = About()
-    #     about.exec()
+class WarningMessage(QMessageBox):
+    def __init__(self, message, title='Warning'):
+        super().__init__()
+        self.setWindowTitle(title)
+        self.setText(message)
+        self.setIcon(QMessageBox.Warning)
+        self.exec()
 
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    window = Window()
+    window = Appication()
     sys.exit(app.exec_())

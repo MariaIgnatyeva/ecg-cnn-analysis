@@ -1,7 +1,12 @@
 .idea/*
 __pycache__/*
+<<<<<<< HEAD
+build/*
+dist/*
+model_v3_2
+.ipynb_checkpoints/*
+=======
 signals_20.rar
 analysis.exe
 model
-analysis.spec
-build/*
+>>>>>>> parent of 8a2ed9c... UI for classification
