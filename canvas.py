@@ -60,7 +60,6 @@ class PlotCanvas(FigureCanvas):
         self.fig.set_tight_layout(True)
 
     def plot_analysis_res(self, signals, fields, preds, qrs_inds):
-        # TODO: reset plot
         min_mv = min(signals[:, 0])
         max_mv = max(signals[:, 0])
 

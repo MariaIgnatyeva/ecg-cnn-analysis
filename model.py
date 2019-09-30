@@ -49,8 +49,6 @@ class ECGModel:
 
     def predict(self, signals, qrs_inds):
         print('predicting...')
-        # pred_images = predict_iterator(signals, qrs_inds)
-        # pred_inds = self.model.predict_classes(pred_images, verbose=1)
         preds = self.model.predict_generator(predict_iterator(signals[:, 0], qrs_inds), steps=len(qrs_inds), verbose=1)
         print('predicting completed...')
         pred_inds = np.argmax(preds, axis=1)

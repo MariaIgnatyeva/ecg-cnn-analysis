@@ -9,8 +9,8 @@ from wfdb import processing
 
 
 class CNNAnalysis():
-    def __init__(self, fname=None):
-        self.data_fname = fname
+    def __init__(self, status_bar=None):
+        self.status_bar = status_bar
         self.model = ECGModel(MODEL_FNAME)
 
     def is_conf_error(self):
@@ -61,7 +61,7 @@ class CNNAnalysis():
             WarningMessage(MIT_ERR_MSG)
             return 1
 
-        signals, fields = wfdb.rdsamp(record_name, sampto=10000)
+        signals, fields = wfdb.rdsamp(record_name, sampto=7000)
         if ext in EDF_EXT:
             signals = signals[:, :-1]
 
@@ -69,7 +69,9 @@ class CNNAnalysis():
 
     def get_qrs_inds(self, signals, fs):
         qrs_inds = processing.correct_peaks(signals[:, 0],
-                                            processing.gqrs_detect(signals[:, 0], fs),
+                                            processing.xqrs_detect(signals[:, 0], fs,
+                                                                   conf=processing.XQRS.Conf(hr_min=20, hr_max=230,
+                                                                                             qrs_width=0.5)),
                                             fs * 60 // 230,
                                             fs // 2,
                                             'compare')
@@ -77,7 +79,9 @@ class CNNAnalysis():
         return qrs_inds
 
     def get_predictions(self, signals, qrs_inds):
-        return self.model.predict(signals, qrs_inds)
+        r =  self.model.predict(signals, qrs_inds)
+        print(r[:10])
+        return r
 
     def analyze(self, data_fname):
         self.data_fname = data_fname

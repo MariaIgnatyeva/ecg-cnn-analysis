@@ -14,7 +14,7 @@ DPI = 100
 APP_TITLE = 'Heart Arrhythmia Classification Using Neural Network'
 
 BASH_PATH_FNAME = 'bash_path.txt'
-MODEL_FNAME = 'model_v3_2'
+MODEL_FNAME = 'model'
 CONVERT_ERR_MSG = '\nSomething went wrong during conversion, check cygwin configuration and if the file is correct'
 BASH_CONF_MSG = 'To analyze data not in MIT-BIH format cygwin is required\n' + \
                 'Choose bash.exe, usually it\'s path is cygwin/bin/bash.exe'
