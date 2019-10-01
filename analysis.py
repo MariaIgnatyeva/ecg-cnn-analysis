@@ -79,7 +79,7 @@ class CNNAnalysis():
         return qrs_inds
 
     def get_predictions(self, signals, qrs_inds):
-        r =  self.model.predict(signals, qrs_inds)
+        r = self.model.predict(signals, qrs_inds)
         print(r[:10])
         return r
 
@@ -87,7 +87,7 @@ class CNNAnalysis():
         self.data_fname = data_fname
         read_data_res = self.read_data()
         if not isinstance(read_data_res, tuple):
-            return
+            return None
 
         fields, signals = read_data_res
         fs = fields['fs']

@@ -129,8 +129,9 @@ class Appication(QMainWindow):
         self.data_fname = QFileDialog.getOpenFileName(self, 'Choose data file',
                                                       filter="ECG format files "
                                                              "(*.txt *.ecg *.cmp *.ano *.edf *.hea *.atr *.dat)")[0]
-        self.data_fname_label.setText(self.data_fname[self.data_fname.rfind('/') + 1:]
-                                      if self.data_fname != '' else 'No file chosen')
+        if self.data_fname != '':
+            self.data_fname_label.setText(self.data_fname[self.data_fname.rfind('/') + 1:])
+
         self.classify_button.setEnabled(self.data_fname != '')
 
     def define_analysis(self):
@@ -145,7 +146,11 @@ class Appication(QMainWindow):
         self.resume_stat_results()
 
         self.statusBar().showMessage('Predicting...')
-        pred_classes, signals, fields, qrs_inds = analysis_obj.analyze(self.data_fname)
+        analysis_res = analysis_obj.analyze(self.data_fname)
+        if analysis_res is None:
+            self.statusBar().showMessage('Error occured, ready to classify')
+            return
+        pred_classes, signals, fields, qrs_inds = analysis_res
 
         self.canvas = PlotCanvas(width=len(signals) // 120, height=FIG_H * signals.shape[1])
         self.canvas.plot_analysis_res(signals, fields, pred_classes, qrs_inds)
@@ -220,8 +225,8 @@ class ConfDialog(QDialog):
     def show_files_dialog(self):
         self.bash_fname = QFileDialog.getOpenFileName(self, 'Choose cygwin bash file',
                                                       filter="bash.exe")[0]
-        self.bash_fname_label.setText(self.bash_fname
-                                      if self.bash_fname != '' else 'No file chosen')
+        if self.bash_fname != '':
+            self.bash_fname_label.setText(self.bash_fname)
 
         with open(BASH_PATH_FNAME, 'w') as fout:
             fout.write(self.bash_fname)
